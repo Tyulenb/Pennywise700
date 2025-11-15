@@ -62,6 +62,8 @@ func (p *Pennywise700) EmulateCycle() {
 //DECODE OP 1
 func (p *Pennywise700) stageOne() {
     stage := 1
+    stage2 := 2
+    stage0 := 0
     stage5 := 4
     J_L_MIPS := false
     SUB_MIPS := false
@@ -72,8 +74,20 @@ func (p *Pennywise700) stageOne() {
     defer p.pipeline.Mtx.Unlock()
     cmd := p.pipeline.Pipe[stage]
     opCode := (p.pipeline.Pipe[stage]&0x00F00000)>>20
+    opCode0 := (p.pipeline.Pipe[stage0]&0x00F00000)>>20
+    opCode2 := p.pipeline.Pipe[stage2]&0x00F00000>>20
     opCode5 := (p.pipeline.Pipe[stage5]&0x00F00000)>>20
 
+    //Prediction logic
+    if opCode0 == JUMP_LESS && (opCode == MTR || opCode == RTR) {
+        p.pc -= 1
+        p.pipeline.Pipe[stage0] = 0 
+    }
+    
+    if opCode0 == MTRK && (opCode == SUB || opCode2 == SUB) {
+        p.pc -= 1
+        p.pipeline.Pipe[stage0] = 0 
+    }
 
     //MIPS for J_L and RTR case
     if opCode == JUMP_LESS && opCode5 == RTR {

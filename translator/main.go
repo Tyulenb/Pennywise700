@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-    coms, err := Assemble("insertion_sort9.txt")
+    coms, err := Assemble("insertion_sort.txt")
     if err != nil {
         fmt.Println(err)
         return
