@@ -35,7 +35,8 @@ The main feature of pipeline processors is simultaneous processing of multiple c
 
 
 ## Program Example
-[Insertion_sort](https://github.com/Tyulenb/Pennywise600/blob/main/insertion_sort.txt)
+[Insertion_sort](https://github.com/Tyulenb/Pennywise700/blob/main/docs/insertion_sort.txt)
+[Pipeline specifications of example](https://github.com/Tyulenb/Pennywise700/blob/main/docs/insertion_sort_pipe_specs.md)
 ## Installation
 ### Requirements
 Go version 1.20 or higher
