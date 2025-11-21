@@ -4,16 +4,24 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+    "github.com/Tyulenb/Pennywise700/translator/internal"
 )
 
 func main() {
-    coms, err := Assemble("insertion_sort.txt")
+    args := os.Args
+    if len(args) != 3 {
+        fmt.Println("FORMAT main.go 'path to your assembly language' 'output file'")
+        return
+    }
+    in := args[1]
+    out := args[2]
+    coms, err := internal.Assemble(in)
     if err != nil {
         fmt.Println(err)
         return
     }
 
-    file, err := os.Create("program.txt")
+    file, err := os.Create(out)
     if err != nil {
         fmt.Println(err)
         return

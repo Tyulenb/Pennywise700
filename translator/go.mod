@@ -1,3 +1,3 @@
-module Pennywise610
+module github.com/Tyulenb/Pennywise700/translator
 
-go 1.23.5
+go 1.25.3

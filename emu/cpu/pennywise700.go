@@ -34,6 +34,7 @@ type Pennywise700 struct {
 	RF       [16]uint16
 	//program counter
 	pc       uint16
+    pc_stop  bool
     ignoreWR uint8
     DebugMode bool
 	pipeline *pipeline.Pipeline
@@ -51,6 +52,10 @@ func NewPennywise700() *Pennywise700 {
 
 func (p *Pennywise700) EmulateCycle() {
     var wg sync.WaitGroup 
+    if p.pc_stop {
+        p.pc-=1
+        p.pc_stop = false
+    }
     p.pipeline.Move(p.cmd_mem[p.pc]) //Zero stage, FETCH COMMAND
     wg.Go(p.stageOne)
     wg.Go(p.stageTwo)
@@ -68,18 +73,52 @@ func (p *Pennywise700) stageOne() {
     defer p.pipeline.Mtx.Unlock()
     opCode := p.pipeline.FetchOpcode(stage)
 
+    //Read potential operands to be read from current stage 
+    r_adr_r, r_skip := p.pipeline.GetReadOpsD1(stage) 
+
+    //Read potential operands to be writen from next stage (Decode 2)
+    _, wD2_adr_r, d2_skip := p.pipeline.GetWriteOps(stage+1)
+    //Read potential operands to be writen from execute stage
+    _, wE_adr_r, e_skip := p.pipeline.GetWriteOps(stage+2)
+    //Read potential operands to be writen from WB stage
+    _, wB_adr_r, wB_skip := p.pipeline.GetWriteOps(stage+3)
+
+    //Checking read-write conflicts
+    if ((r_adr_r == wD2_adr_r && !d2_skip) || (r_adr_r == wE_adr_r && !e_skip)) && !r_skip { 
+        p.pipeline.M3 = true
+        p.pc_stop = true 
+        return
+    }
+
     //execute command with alu
     switch opCode {
     case LTM:
         p.pipeline.Alu[stage].Op1 = p.pipeline.DecodeLiteral(stage) 
 
     case RTR, MTRK:
-        adr_r2 := p.pipeline.DecodeAdrR2(stage)
-        p.pipeline.Alu[stage].Op1 = p.RF[adr_r2]
+        if r_adr_r == wB_adr_r && !r_skip && !wB_skip{
+            p.pipeline.Alu[stage].Op1 = p.pipeline.Alu[stage+3].Res
+            if p.pipeline.FetchOpcode(stage+3) == MTRK {
+                p.pipeline.Alu[stage].Op1 = p.mem[p.pipeline.Alu[stage+3].Res]
+            }
+            if p.DebugMode {
+                fmt.Println("Write back was executed")
+            }
+        } else {
+            adr_r2 := p.pipeline.DecodeAdrR2(stage)
+            p.pipeline.Alu[stage].Op1 = p.RF[adr_r2]
+        }
 
     case SUB, JUMP_LESS, SUM, RTMK:
-        adr_r1 := p.pipeline.DecodeAdrR1(stage)
-        p.pipeline.Alu[stage].Op1 = p.RF[adr_r1]
+        if r_adr_r == wB_adr_r {
+            p.pipeline.Alu[stage].Op1 = p.pipeline.Alu[stage+3].Res
+            if p.DebugMode {
+                fmt.Println("Write back was executed")
+            }
+        } else {
+            adr_r1 := p.pipeline.DecodeAdrR1(stage)
+            p.pipeline.Alu[stage].Op1 = p.RF[adr_r1]
+        }
 
     case JMP:
         p.pipeline.Alu[stage].Op1 = p.pipeline.DecodeAdrToJump(stage) 
@@ -92,17 +131,55 @@ func (p *Pennywise700) stageOne() {
 //DECODE OP 2
 func (p *Pennywise700) stageTwo() {
     stage := 2
+    p.pipeline.Mtx.Lock()
+    defer p.pipeline.Mtx.Unlock()
     opCode := p.pipeline.FetchOpcode(stage)
+
+    //Read potential operands to be read from current stage 
+    r_adr_m, r_adr_r, r_skip := p.pipeline.GetReadOpsD2(stage)
+    //Read potential operands to be writen from execute stage
+    wE_adr_m, wE_adr_r, e_skip := p.pipeline.GetWriteOps(stage+1)
+    //Read potential operands to be writen from WB stage
+    wB_adr_m, wB_adr_r, wB_skip := p.pipeline.GetWriteOps(stage+2)
+
+    if !r_skip && !e_skip && (r_adr_r == wE_adr_r)  {
+        p.pipeline.M4 = true  
+        p.pc_stop = true
+        return
+    }
+    if opCode == MTR && (p.pipeline.FetchOpcode(stage+1) == RTMK) && (r_adr_m == p.RF[wE_adr_m]) && !r_skip && !e_skip{
+        p.pipeline.M4 = true  
+        p.pc_stop = true
+        return
+    }
 
     //execute command with alu
     switch opCode {
     case SUB, SUM, JUMP_LESS:
-        adr_r2 := p.pipeline.DecodeAdrR2(stage) 
-        p.pipeline.Alu[stage].Op2 = p.RF[adr_r2]
+        if r_adr_r == wB_adr_r && !r_skip && !wB_skip {
+            p.pipeline.Alu[stage].Op2 = p.pipeline.Alu[stage+2].Res
+            if p.pipeline.FetchOpcode(stage+2) == MTRK {
+                p.pipeline.Alu[stage].Op2 = p.mem[p.pipeline.Alu[stage+2].Res]
+            }
+            if p.DebugMode {
+                fmt.Println("Write back was executed")
+            }
+        }else {
+            adr_r2 := p.pipeline.DecodeAdrR2(stage) 
+            p.pipeline.Alu[stage].Op2 = p.RF[adr_r2]
+        }
 
     case MTR:
-        adr_m := p.pipeline.DecodeAdrM(stage)
-        p.pipeline.Alu[stage].Op1 = p.mem[adr_m] //In this command can write to any operand
+        if !r_skip && !wB_skip && 
+            (r_adr_m == wB_adr_m || p.pipeline.FetchOpcode(stage+2) == RTMK && r_adr_m == p.RF[wB_adr_m]) {
+            p.pipeline.Alu[stage].Op1 = p.pipeline.Alu[stage+2].Res
+            if p.DebugMode {
+                fmt.Println("Write back was executed")
+            }
+        }else {
+            adr_m := p.pipeline.DecodeAdrM(stage)
+            p.pipeline.Alu[stage].Op1 = p.mem[adr_m] //In this command can write to any operand
+        }
     }
 
     if p.DebugMode {
