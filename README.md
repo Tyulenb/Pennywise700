@@ -24,7 +24,7 @@ The main feature of pipeline processors is simultaneous processing of multiple c
 | ----------- | ----------- | -------------- | -------------- | ----------- | --------------------------------------------------------------- |
 | `NOP`       | cmd_mem[pc] | -              | -              | -           | -                                                               |
 | `LTM`       | cmd_mem[pc] | op1=literal    | -              | res=op1     | mem[adr_m]=res<br>pc+=1                                         |
-| `MTR`       | cmd_mem[pc] | -              | op1=mem[adr_m] | res=op1     | RF[adr_r1]=res<br>pc+=1                                         |
+| `MTR`       | cmd_mem[pc] | -              | op2=mem[adr_m] | res=op2     | RF[adr_r1]=res<br>pc+=1                                         |
 | `RTR`       | cmd_mem[pc] | op1=RF[adr_r2] | -              | res=op1     | RF[adr_r1]=res<br>pc+=1                                         |
 | `SUB`       | cmd_mem[pc] | op1=RF[adr_r1] | op2=RF[adr_r2] | res=op1-op2 | RF[adr_r3]=res<br>pc+=1                                         |
 | `JUMP_LESS` | cmd_mem[pc] | op1=RF[adr_r1] | op2=RF[adr_r2] | res=op1<op2 | if(RF[adr_r1] >= RF[adr_r2]) { pc = adr_to_jump }<br>else pc+=1 |
